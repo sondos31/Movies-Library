@@ -1,11 +1,13 @@
 'use strict'
 
 const express = require("express");
-const cors = require('cors');
+
 const movies = require("./MovieData/data.json");
 const dotenv = require("dotenv");
 const axios = require("axios");
 const pg = require("pg");
+const cors = require("cors");
+
 
 dotenv.config();
 
@@ -17,7 +19,12 @@ const MYAPIKEY = process.env.MYAPIKEY;
 const PORT = process.env.PORT;
 const DATABASE_URL = process.env.DATABASE_URL;
 
-const client = new pg.Client(DATABASE_URL);
+//const client = new pg.Client(DATABASE_URL);
+
+const client = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
 
 function Movie(id, title, release_date, poster_path, overview) {
 
@@ -31,6 +38,9 @@ function Movie(id, title, release_date, poster_path, overview) {
 
 app.use(express.json());
 
+
+
+
 app.get('/', homeHandler);
 
 app.get('/favorite', favoriteHandler);
@@ -43,22 +53,69 @@ app.get('/review', reviewHandler);
 
 app.get('/watch', watchHandler);
 
-
 app.post('/addMovie', addMovieHandler);
 
 app.get('/getMovie', getMovieHandler);
 
+app.put("/UPDATE/:id", updateHandler);
+
+app.delete("/DELETE/:id", deleteHandler);
+
+app.get("/getMovie/:id", getMovieIdHandler)
 
 app.use("*", notFoundHandler);
 
 app.use(errorHandler);
+
+function updateHandler(req, res) {
+    const id = req.params.id;
+    const movie = req.body;
+
+    console.log(movie);
+    const sql = `UPDATE movieTable SET title=$1, release_date=$2 , poster_path=$3 , overview=$4 , comments=$5 WHERE id=$6 RETURNING *;`;
+    const values = [movie.title, movie.release_date, movie.poster_path, movie.overview, movie.comments, id];
+
+    client.query(sql, values).then((result) => {
+        return res.status(200).json(result);
+    }).catch((error) => {
+        errorHandler(error, req, res);
+    })
+   
+
+};
+
+function deleteHandler(req, res) {
+    const id = req.params.id
+
+    const sql = `DELETE FROM movieTable WHERE id=$1;`
+    const values = [id];
+
+    client.query(sql, values).then(() => {
+        return res.status(204).json({})
+    }).catch(error => {
+        errorHandler(error, req, res);
+    })
+};
+
+function getMovieIdHandler(req, res) {
+    let id = req.params.id;
+
+    const sql = `SELECT * FROM movieTable WHERE id=$1;`;
+    const values = [id];
+
+    client.query(sql, values).then((result) => {
+        return res.status(200).json(result);
+    }).catch((error) => {
+        errorHandler(error, req, res)
+    })
+};
 
 
 function addMovieHandler(req, res) {
     const movie = req.body;
     console.log(movie);
     const sql = `INSERT INTO movieTable(title, release_date, poster_path , overview , comments) VALUES($1, $2, $3, $4, $5) RETURNING *`
-    const values = [movie.title, movie.release_date, movie.poster_path, movie.overview , movie.comments]
+    const values = [movie.title, movie.release_date, movie.poster_path, movie.overview, movie.comments]
     client.query(sql, values).then((result) => {
         return res.status(201).json(result.rows);
     }).catch((error) => {
@@ -100,19 +157,18 @@ function trendingHandler(req, res) {
 function searchHandler(request, response) {
     const searching = request.query.original_title;
     let arr = [];
-    axios.get(`https://api.themoviedb.org/3/search/movie?api_key=${MYAPIKEY}&language=en-US&query=${searching}1&include_adult=false`)
+    axios.get(`https://api.themoviedb.org/3/search/movie?api_key=${MYAPIKEY}&language=en-US&query=${searching}&include_adult=false`)
         .then(apiResponse => {
+            apiResponse.data.results.map(value => {
+                let theMovie = new Movie(value.id, value.title, value.release_date, value.poster_path, value.overview);
+                arr.push(theMovie);
 
-            console.log(apiResponse);
+            })
 
-
-            let theResponse = new Movie(apiResponse.page, apiResponse.data.poster_path, apiResponse.data.adult, apiResponse.data.overview, apiResponse.data.release_date, apiResponse.datagenre_ids);
-
-
-            return response.status(200).json(theResponse);
+            return response.status(200).json(arr);
 
         }).catch(error => {
-            errorHandler(error, req, res);
+            errorHandler(error, request, response);
         })
 
 
