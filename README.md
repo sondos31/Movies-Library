@@ -6,6 +6,8 @@ Author Name: Sondos Majid
 
 ## image
 ![image](./image.jpg)
+## image2
+![image2](./image2.jpg)
 
 ## Overview
 client controls the response when request is received
